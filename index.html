@@ -112,8 +112,7 @@
   <div class="modal" id="unitModal">
     <div class="modal-content">
       <h3 id="modalTitle">Unit Details</h3>
-      <!-- UX Improvement: Helper text showing expected format -->
-      <div style="font-size: 12px; color: #666; text-align: center; margin-top: -8px;">Type unit suffix (e.g. 05 for #12-05)</div>
+      <div style="font-size: 12px; color: #666; text-align: center; margin-top: -8px;">Typing full unit auto-fills the entire column stack</div>
       <input type="text" id="unitNumberInput" placeholder="#XX-XX">
       <select id="remarkSelect">
         <option value="">-- Select Status --</option>
@@ -281,7 +280,7 @@
               { key: '4room_sold', label: '4-Room' },
               { key: '5room_sold', label: '5-Room' },
               { key: 'exec_sold', label: 'Executive' },
-              { key: 'multigen_sold', label: 'Multi-Gene' }
+              { key: 'multigen_sold', label: 'Multi-Gen' }
             ];
             
             let tagsHtml = '';
@@ -357,7 +356,6 @@
       const data = blockData[unitId] || {};
       document.getElementById('modalTitle').innerText = `Floor ${floor} - Slot ${slot}`;
       
-      // UX Improvement: Auto-format the floor prefix (e.g. #03-)
       const floorStr = floor < 10 ? `0${floor}` : `${floor}`;
       const defaultPrefix = `#${floorStr}-`;
       
@@ -367,7 +365,6 @@
       
       document.getElementById('unitModal').style.display = 'flex';
       
-      // Automatically focus cursor in the text box so keyboard pops up instantly on iPad
       setTimeout(() => {
         inputField.focus();
         inputField.setSelectionRange(inputField.value.length, inputField.value.length);
@@ -379,25 +376,53 @@
     }
 
     function saveUnitData() {
-      let number = document.getElementById('unitNumberInput').value.trim();
+      let inputVal = document.getElementById('unitNumberInput').value.trim();
       const statusSelect = document.getElementById('remarkSelect');
       const status = statusSelect.value;
       const statusLabel = statusSelect.options[statusSelect.selectedIndex].text;
 
-      // If user only typed the digits (e.g. "05"), automatically prepend the floor prefix (#12-)
       const floorStr = activeFloorNum < 10 ? `0${activeFloorNum}` : `${activeFloorNum}`;
-      if (number && !number.startsWith('#')) {
-        number = `#${floorStr}-${number.padStart(2, '0')}`;
-      } else if (!number) {
-        // Fallback default if left blank
+      
+      // Handle formatting if user just typed the suffix
+      if (inputVal && !inputVal.includes('-')) {
+        inputVal = `#${floorStr}-${inputVal.padStart(3, '0')}`;
+      } else if (!inputVal) {
         const slotStr = activeSlotNum < 10 ? `0${activeSlotNum}` : `${activeSlotNum}`;
-        number = `#${floorStr}-${slotStr}`;
+        inputVal = `#${floorStr}-${slotStr}`;
       }
 
-      if (status) {
-        blockData[activeUnitId] = { number, status, statusLabel };
-      } else {
-        delete blockData[activeUnitId];
+      // Extract the unit/stack suffix (e.g., "-771" from "#04-771")
+      const parts = inputVal.split('-');
+      const unitSuffix = parts.length > 1 ? parts[1] : '';
+
+      // Save/Update the targeted slot AND auto-fill the whole column stack
+      for (let f = TOTAL_FLOORS; f >= 2; f--) {
+        const targetUnitId = `F${f}-U${activeSlotNum}`;
+        const fStr = f < 10 ? `0${f}` : `${f}`;
+        const generatedUnitNum = `#${fStr}-${unitSuffix}`;
+
+        if (!blockData[targetUnitId]) {
+          blockData[targetUnitId] = {};
+        }
+
+        // Always update the unit number for this column stack
+        blockData[targetUnitId].number = generatedUnitNum;
+
+        // If this is the exact slot the user clicked, also save their chosen status
+        if (targetUnitId === activeUnitId) {
+          if (status) {
+            blockData[targetUnitId].status = status;
+            blockData[targetUnitId].statusLabel = statusLabel;
+          } else {
+            delete blockData[targetUnitId].status;
+            delete blockData[targetUnitId].statusLabel;
+          }
+        }
+
+        // Clean up empty entries if no status and default slot name
+        if (!blockData[targetUnitId].status && blockData[targetUnitId].number === generatedUnitNum) {
+          // Keep if number was customized, but clean if completely blank status
+        }
       }
 
       localStorage.setItem('hdb_block_data', JSON.stringify(blockData));
