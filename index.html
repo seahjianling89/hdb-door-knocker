@@ -112,7 +112,9 @@
   <div class="modal" id="unitModal">
     <div class="modal-content">
       <h3 id="modalTitle">Unit Details</h3>
-      <input type="text" id="unitNumberInput" placeholder="Unit No. (e.g. #12-105)">
+      <!-- UX Improvement: Helper text showing expected format -->
+      <div style="font-size: 12px; color: #666; text-align: center; margin-top: -8px;">Type unit suffix (e.g. 05 for #12-05)</div>
+      <input type="text" id="unitNumberInput" placeholder="#XX-XX">
       <select id="remarkSelect">
         <option value="">-- Select Status --</option>
         <option value="not-home">Not Home / No Answer</option>
@@ -128,10 +130,11 @@
     let TOTAL_FLOORS = parseInt(localStorage.getItem('hdb_total_floors')) || 15; 
     let UNITS_PER_FLOOR = parseInt(localStorage.getItem('hdb_units_per_floor')) || 8; 
     
-    // Apply initial CSS variable for grid columns
     document.documentElement.style.setProperty('--units-per-floor', UNITS_PER_FLOOR);
 
     let activeUnitId = null;
+    let activeFloorNum = null;
+    let activeSlotNum = null;
     let blockData = JSON.parse(localStorage.getItem('hdb_block_data')) || {};
 
     const savedMode = localStorage.getItem('hdb_search_mode') || 'postal';
@@ -178,7 +181,7 @@
       localStorage.setItem('hdb_header_date', document.getElementById('dateInput').value);
     }
 
-    // --- API INTEGRATION (OneMap + Data.gov.sg) ---
+    // --- API INTEGRATION ---
     async function fetchHdbInfo() {
       const mode = document.getElementById('searchMode').value;
       const searchVal = document.getElementById('searchInput').value.trim();
@@ -246,7 +249,6 @@
 
           const maxFloor = parseInt(record.max_floor_lvl);
           
-          // Calculate total dwelling units from flat breakdown
           const flatTypes = [
             '1room_sold', '2room_sold', '3room_sold', '4room_sold', '5room_sold', 'exec_sold', 'multigen_sold'
           ];
@@ -259,12 +261,11 @@
             TOTAL_FLOORS = maxFloor;
             localStorage.setItem('hdb_total_floors', maxFloor);
             
-            // Automatically calculate units per floor (Residential floors = maxFloor - 1 for void deck)
             const residentialFloors = Math.max(1, maxFloor - 1);
             if (totalUnits > 0) {
               UNITS_PER_FLOOR = Math.max(4, Math.ceil(totalUnits / residentialFloors));
             } else {
-              UNITS_PER_FLOOR = 8; // fallback default
+              UNITS_PER_FLOOR = 8;
             }
             localStorage.setItem('hdb_units_per_floor', UNITS_PER_FLOOR);
             document.documentElement.style.setProperty('--units-per-floor', UNITS_PER_FLOOR);
@@ -280,7 +281,7 @@
               { key: '4room_sold', label: '4-Room' },
               { key: '5room_sold', label: '5-Room' },
               { key: 'exec_sold', label: 'Executive' },
-              { key: 'multigen_sold', label: 'Multi-Gen' }
+              { key: 'multigen_sold', label: 'Multi-Gene' }
             ];
             
             let tagsHtml = '';
@@ -335,7 +336,7 @@
           
           const card = document.createElement('div');
           card.className = `unit-card ${savedInfo.status || ''}`;
-          card.onclick = () => openModal(unitId, f);
+          card.onclick = () => openModal(unitId, f, u);
           
           card.innerHTML = `
             <strong>${savedInfo.number || `Slot ${u}`}</strong>
@@ -348,13 +349,29 @@
       }
     }
 
-    function openModal(unitId, floor) {
+    function openModal(unitId, floor, slot) {
       activeUnitId = unitId;
+      activeFloorNum = floor;
+      activeSlotNum = slot;
+      
       const data = blockData[unitId] || {};
-      document.getElementById('modalTitle').innerText = `Floor ${floor} - Slot ${unitId.split('-U')[1]}`;
-      document.getElementById('unitNumberInput').value = data.number || '';
+      document.getElementById('modalTitle').innerText = `Floor ${floor} - Slot ${slot}`;
+      
+      // UX Improvement: Auto-format the floor prefix (e.g. #03-)
+      const floorStr = floor < 10 ? `0${floor}` : `${floor}`;
+      const defaultPrefix = `#${floorStr}-`;
+      
+      const inputField = document.getElementById('unitNumberInput');
+      inputField.value = data.number || defaultPrefix;
       document.getElementById('remarkSelect').value = data.status || '';
+      
       document.getElementById('unitModal').style.display = 'flex';
+      
+      // Automatically focus cursor in the text box so keyboard pops up instantly on iPad
+      setTimeout(() => {
+        inputField.focus();
+        inputField.setSelectionRange(inputField.value.length, inputField.value.length);
+      }, 100);
     }
 
     function closeModal() {
@@ -362,10 +379,20 @@
     }
 
     function saveUnitData() {
-      const number = document.getElementById('unitNumberInput').value;
+      let number = document.getElementById('unitNumberInput').value.trim();
       const statusSelect = document.getElementById('remarkSelect');
       const status = statusSelect.value;
       const statusLabel = statusSelect.options[statusSelect.selectedIndex].text;
+
+      // If user only typed the digits (e.g. "05"), automatically prepend the floor prefix (#12-)
+      const floorStr = activeFloorNum < 10 ? `0${activeFloorNum}` : `${activeFloorNum}`;
+      if (number && !number.startsWith('#')) {
+        number = `#${floorStr}-${number.padStart(2, '0')}`;
+      } else if (!number) {
+        // Fallback default if left blank
+        const slotStr = activeSlotNum < 10 ? `0${activeSlotNum}` : `${activeSlotNum}`;
+        number = `#${floorStr}-${slotStr}`;
+      }
 
       if (status) {
         blockData[activeUnitId] = { number, status, statusLabel };
