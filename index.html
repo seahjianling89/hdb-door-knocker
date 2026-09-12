@@ -15,17 +15,39 @@
       justify-content: space-between; 
       align-items: flex-start; 
       max-width: 800px; 
-      margin: 0 auto 20px auto; 
+      margin: 0 auto 15px auto; 
       flex-wrap: wrap; 
       gap: 15px; 
     }
     
-    .header-info { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; }
+    .header-info { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 320px; }
     .header-info input { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; width: 100%; }
     
+    /* Search Group for API */
+    .search-group { display: flex; gap: 8px; width: 100%; }
+    .search-group input { flex: 1; margin: 0; }
+    .search-group button { padding: 0 16px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; white-space: nowrap; }
+    
     .controls { display: flex; gap: 10px; }
-    button { padding: 12px 16px; font-size: 16px; border-radius: 8px; border: none; background: #007aff; color: white; font-weight: bold; cursor: pointer; }
+    button.action-btn { padding: 12px 16px; font-size: 16px; border-radius: 8px; border: none; background: #007aff; color: white; font-weight: bold; cursor: pointer; }
     button.clear { background: #ff3b30; }
+
+    /* Intelligence Panel */
+    .intelligence-box {
+      max-width: 800px;
+      margin: 0 auto 20px auto;
+      background: #e5f1ff;
+      border-left: 5px solid #007aff;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      line-height: 1.5;
+      display: none; /* Hidden until data is fetched */
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .intelligence-box strong { color: #004b99; }
+    .intel-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .intel-tag { background: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; border: 1px solid #cce4ff; font-size: 12px; color: #333; }
 
     /* The Tower Layout */
     .grid-container { display: flex; flex-direction: column; gap: 8px; max-width: 800px; margin: 0 auto; padding-bottom: 40px; }
@@ -56,15 +78,21 @@
   
   <div class="top-bar">
     <div class="header-info">
-      <!-- Added realistic placeholder for better feel -->
-      <input type="text" id="blockStreetInput" placeholder="Block & Street (e.g. 105A Canberra Street)" onchange="saveHeaderData()">
+      <div class="search-group">
+        <input type="text" id="blockStreetInput" placeholder="Block & Street (e.g. 105A Canberra)" onchange="saveHeaderData()">
+        <button id="fetchBtn" onclick="fetchHdbInfo()" title="Fetch Max Floors from Data.gov.sg">Get Intel</button>
+      </div>
       <input type="date" id="dateInput" onchange="saveHeaderData()">
     </div>
+    
     <div class="controls">
-      <button onclick="exportCSV()">Export to CSV</button>
-      <button class="clear" onclick="clearData()">Reset Block</button>
+      <button class="action-btn" onclick="exportCSV()">Export to CSV</button>
+      <button class="action-btn clear" onclick="clearData()">Reset Block</button>
     </div>
   </div>
+
+  <!-- Intelligence Panel -->
+  <div id="blockIntelligence" class="intelligence-box"></div>
 
   <div class="grid-container" id="buildingGrid"></div>
 
@@ -79,26 +107,32 @@
         <option value="not-interested">Not Interested</option>
         <option value="follow-up">Follow Up / Warm Lead</option>
       </select>
-      <button onclick="saveUnitData()">Save Entry</button>
-      <button style="background:#8e8e93" onclick="closeModal()">Cancel</button>
+      <button class="action-btn" onclick="saveUnitData()">Save Entry</button>
+      <button class="action-btn" style="background:#8e8e93" onclick="closeModal()">Cancel</button>
     </div>
   </div>
 
   <script>
-    const TOTAL_FLOORS = 15; // Change this based on the specific HDB block height
-    const UNITS_PER_FLOOR = 8; // Change this based on how many units per level
+    let TOTAL_FLOORS = parseInt(localStorage.getItem('hdb_total_floors')) || 15; 
+    let UNITS_PER_FLOOR = 10; 
     
     let activeUnitId = null;
     let blockData = JSON.parse(localStorage.getItem('hdb_block_data')) || {};
 
-    // Load saved header info (Block/Street and Date)
+    // Load saved header and intelligence info
     document.getElementById('blockStreetInput').value = localStorage.getItem('hdb_header_block') || '';
     
-    // Auto-fill today's date if empty
+    const savedIntelHTML = localStorage.getItem('hdb_intelligence_html');
+    if (savedIntelHTML) {
+      const intelBox = document.getElementById('blockIntelligence');
+      intelBox.innerHTML = savedIntelHTML;
+      intelBox.style.display = 'block';
+    }
+
     let savedDate = localStorage.getItem('hdb_header_date');
     if (!savedDate) {
       const today = new Date();
-      savedDate = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      savedDate = today.toISOString().split('T')[0];
     }
     document.getElementById('dateInput').value = savedDate;
 
@@ -107,31 +141,111 @@
       localStorage.setItem('hdb_header_date', document.getElementById('dateInput').value);
     }
 
+    // --- DATA.GOV.SG API INTEGRATION ---
+    async function fetchHdbInfo() {
+      const query = document.getElementById('blockStreetInput').value.trim();
+      if (!query) {
+        alert("Please enter a Block and Street name first.");
+        return;
+      }
+      
+      const fetchBtn = document.getElementById('fetchBtn');
+      fetchBtn.innerText = "Loading...";
+
+      try {
+        const resource_id = 'd_17f5382f26140b1fdae0ba2ef6239d2f';
+        const url = \`https://data.gov.sg/api/action/datastore_search?resource_id=\${resource_id}&q=\${encodeURIComponent(query)}\`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success && data.result.records.length > 0) {
+          const record = data.result.records[0];
+          const maxFloor = parseInt(record.max_floor_lvl);
+          
+          if (maxFloor && !isNaN(maxFloor)) {
+            TOTAL_FLOORS = maxFloor;
+            localStorage.setItem('hdb_total_floors', maxFloor);
+            
+            // Build the Intelligence Panel
+            const yearCompleted = record.year_completed || "Unknown";
+            const currentYear = new Date().getFullYear();
+            const age = currentYear - parseInt(yearCompleted);
+            
+            // Check flat types
+            const flatTypes = [
+              { key: '1room_sold', label: '1-Room' },
+              { key: '2room_sold', label: '2-Room' },
+              { key: '3room_sold', label: '3-Room' },
+              { key: '4room_sold', label: '4-Room' },
+              { key: '5room_sold', label: '5-Room' },
+              { key: 'exec_sold', label: 'Executive' },
+              { key: 'multigen_sold', label: 'Multi-Gen' }
+            ];
+            
+            let tagsHtml = '';
+            let totalUnits = 0;
+            
+            flatTypes.forEach(type => {
+              const count = parseInt(record[type.key]);
+              if (count > 0) {
+                tagsHtml += \`<div class="intel-tag">\${type.label}: \${count} units</div>\`;
+                totalUnits += count;
+              }
+            });
+
+            const intelHTML = \`
+              <strong>🏢 Block Intelligence: Blk \${record.blk_no} \${record.street}</strong><br>
+              Completed: \${yearCompleted} (\${age} years old) | Total Units: \${totalUnits} | Max Floors: \${maxFloor}
+              <div class="intel-tags">\${tagsHtml}</div>
+            \`;
+
+            const intelBox = document.getElementById('blockIntelligence');
+            intelBox.innerHTML = intelHTML;
+            intelBox.style.display = 'block';
+            
+            // Save intelligence to local storage
+            localStorage.setItem('hdb_intelligence_html', intelHTML);
+            
+            renderGrid();
+          }
+        } else {
+          alert("No results found. Try simplifying the search (e.g., '105A Canberra').");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error fetching from Data.gov.sg. You might be offline.");
+      }
+      
+      fetchBtn.innerText = "Get Intel";
+      saveHeaderData();
+    }
+    // ------------------------------------
+
     function renderGrid() {
       const grid = document.getElementById('buildingGrid');
       grid.innerHTML = '';
 
-      // Build floors from top down, STOPPING at 2 (Removing Level 1)
       for (let f = TOTAL_FLOORS; f >= 2; f--) {
         const row = document.createElement('div');
         row.className = 'floor-row';
-        row.innerHTML = `<div class="floor-label">Lvl ${f}</div>`;
+        row.innerHTML = \`<div class="floor-label">Lvl \${f}</div>\`;
 
         const unitsContainer = document.createElement('div');
         unitsContainer.className = 'units-container';
 
         for (let u = 1; u <= UNITS_PER_FLOOR; u++) {
-          const unitId = `F${f}-U${u}`;
+          const unitId = \`F\${f}-U\${u}\`;
           const savedInfo = blockData[unitId] || {};
           
           const card = document.createElement('div');
-          card.className = `unit-card ${savedInfo.status || ''}`;
+          card.className = \`unit-card \${savedInfo.status || ''}\`;
           card.onclick = () => openModal(unitId, f);
           
-          card.innerHTML = `
-            <strong>${savedInfo.number || `Slot ${u}`}</strong>
-            <span>${savedInfo.statusLabel || 'Tap to set'}</span>
-          `;
+          card.innerHTML = \`
+            <strong>\${savedInfo.number || \`Slot \${u}\`}</strong>
+            <span>\${savedInfo.statusLabel || 'Tap to set'}</span>
+          \`;
           unitsContainer.appendChild(card);
         }
         row.appendChild(unitsContainer);
@@ -142,7 +256,7 @@
     function openModal(unitId, floor) {
       activeUnitId = unitId;
       const data = blockData[unitId] || {};
-      document.getElementById('modalTitle').innerText = `Floor ${floor} - Slot ${unitId.split('-U')[1]}`;
+      document.getElementById('modalTitle').innerText = \`Floor \${floor} - Slot \${unitId.split('-U')[1]}\`;
       document.getElementById('unitNumberInput').value = data.number || '';
       document.getElementById('remarkSelect').value = data.status || '';
       document.getElementById('unitModal').style.display = 'flex';
@@ -173,29 +287,35 @@
       const blockName = document.getElementById('blockStreetInput').value || 'Unknown Block';
       const dateVal = document.getElementById('dateInput').value || 'Unknown Date';
       
-      let csv = `Block/Street:, "${blockName}"\n`;
-      csv += `Date:, "${dateVal}"\n\n`;
-      csv += 'Floor/Slot,Unit Number,Status\n';
+      let csv = \`Block/Street:, "\${blockName}"\\n\`;
+      csv += \`Date:, "\${dateVal}"\\n\\n\`;
+      csv += 'Floor/Slot,Unit Number,Status\\n';
       
       for (const [key, value] of Object.entries(blockData)) {
-        csv += `"${key}","${value.number || ''}","${value.statusLabel || ''}"\n`;
+        csv += \`"\${key}","\${value.number || ''}","\${value.statusLabel || ''}"\\n\`;
       }
       
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.setAttribute('href', url);
-      // Clean up filename based on block input
       let safeFileName = blockName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       if (!safeFileName) safeFileName = "hdb_leads";
-      a.setAttribute('download', `${safeFileName}_export.csv`);
+      a.setAttribute('download', \`\${safeFileName}_export.csv\`);
       a.click();
     }
 
     function clearData() {
-      if (confirm('Are you sure you want to clear all unit data? (Block & Date will be kept)')) {
+      if (confirm('Are you sure you want to clear all unit data? (Block height & Date will be kept)')) {
         blockData = {};
         localStorage.removeItem('hdb_block_data');
+        
+        // Also clear the intelligence block to start totally fresh
+        localStorage.removeItem('hdb_intelligence_html');
+        document.getElementById('blockIntelligence').style.display = 'none';
+        document.getElementById('blockStreetInput').value = '';
+        localStorage.removeItem('hdb_header_block');
+        
         renderGrid();
       }
     }
