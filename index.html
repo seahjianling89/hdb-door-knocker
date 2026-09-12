@@ -42,7 +42,7 @@
       border-radius: 6px;
       font-size: 14px;
       line-height: 1.5;
-      display: none; /* Hidden until data is fetched */
+      display: none;
       box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     .intelligence-box strong { color: #004b99; }
@@ -79,7 +79,8 @@
   <div class="top-bar">
     <div class="header-info">
       <div class="search-group">
-        <input type="text" id="blockStreetInput" placeholder="Block & Street (e.g. 105A Canberra)" onchange="saveHeaderData()">
+        <!-- Remember to use the full street name when searching! e.g. 287A Compassvale Crescent -->
+        <input type="text" id="blockStreetInput" placeholder="Block & Street Name" onchange="saveHeaderData()">
         <button id="fetchBtn" onclick="fetchHdbInfo()" title="Fetch Max Floors from Data.gov.sg">Get Intel</button>
       </div>
       <input type="date" id="dateInput" onchange="saveHeaderData()">
@@ -154,7 +155,7 @@
 
       try {
         const resource_id = 'd_17f5382f26140b1fdae0ba2ef6239d2f';
-        const url = \`https://data.gov.sg/api/action/datastore_search?resource_id=\${resource_id}&q=\${encodeURIComponent(query)}\`;
+        const url = `https://data.gov.sg/api/action/datastore_search?resource_id=${resource_id}&q=${encodeURIComponent(query)}`;
         
         const response = await fetch(url);
         const data = await response.json();
@@ -172,7 +173,6 @@
             const currentYear = new Date().getFullYear();
             const age = currentYear - parseInt(yearCompleted);
             
-            // Check flat types
             const flatTypes = [
               { key: '1room_sold', label: '1-Room' },
               { key: '2room_sold', label: '2-Room' },
@@ -189,28 +189,27 @@
             flatTypes.forEach(type => {
               const count = parseInt(record[type.key]);
               if (count > 0) {
-                tagsHtml += \`<div class="intel-tag">\${type.label}: \${count} units</div>\`;
+                tagsHtml += `<div class="intel-tag">${type.label}: ${count} units</div>`;
                 totalUnits += count;
               }
             });
 
-            const intelHTML = \`
-              <strong>🏢 Block Intelligence: Blk \${record.blk_no} \${record.street}</strong><br>
-              Completed: \${yearCompleted} (\${age} years old) | Total Units: \${totalUnits} | Max Floors: \${maxFloor}
-              <div class="intel-tags">\${tagsHtml}</div>
-            \`;
+            const intelHTML = `
+              <strong>🏢 Block Intelligence: Blk ${record.blk_no} ${record.street}</strong><br>
+              Completed: ${yearCompleted} (${age} years old) | Total Units: ${totalUnits} | Max Floors: ${maxFloor}
+              <div class="intel-tags">${tagsHtml}</div>
+            `;
 
             const intelBox = document.getElementById('blockIntelligence');
             intelBox.innerHTML = intelHTML;
             intelBox.style.display = 'block';
             
-            // Save intelligence to local storage
             localStorage.setItem('hdb_intelligence_html', intelHTML);
             
             renderGrid();
           }
         } else {
-          alert("No results found. Try simplifying the search (e.g., '105A Canberra').");
+          alert("No results found. Remember to use the full street name (e.g., '287A Compassvale Crescent').");
         }
       } catch (err) {
         console.error(err);
@@ -229,23 +228,23 @@
       for (let f = TOTAL_FLOORS; f >= 2; f--) {
         const row = document.createElement('div');
         row.className = 'floor-row';
-        row.innerHTML = \`<div class="floor-label">Lvl \${f}</div>\`;
+        row.innerHTML = `<div class="floor-label">Lvl ${f}</div>`;
 
         const unitsContainer = document.createElement('div');
         unitsContainer.className = 'units-container';
 
         for (let u = 1; u <= UNITS_PER_FLOOR; u++) {
-          const unitId = \`F\${f}-U\${u}\`;
+          const unitId = `F${f}-U${u}`;
           const savedInfo = blockData[unitId] || {};
           
           const card = document.createElement('div');
-          card.className = \`unit-card \${savedInfo.status || ''}\`;
+          card.className = `unit-card ${savedInfo.status || ''}`;
           card.onclick = () => openModal(unitId, f);
           
-          card.innerHTML = \`
-            <strong>\${savedInfo.number || \`Slot \${u}\`}</strong>
-            <span>\${savedInfo.statusLabel || 'Tap to set'}</span>
-          \`;
+          card.innerHTML = `
+            <strong>${savedInfo.number || `Slot ${u}`}</strong>
+            <span>${savedInfo.statusLabel || 'Tap to set'}</span>
+          `;
           unitsContainer.appendChild(card);
         }
         row.appendChild(unitsContainer);
@@ -256,7 +255,7 @@
     function openModal(unitId, floor) {
       activeUnitId = unitId;
       const data = blockData[unitId] || {};
-      document.getElementById('modalTitle').innerText = \`Floor \${floor} - Slot \${unitId.split('-U')[1]}\`;
+      document.getElementById('modalTitle').innerText = `Floor ${floor} - Slot ${unitId.split('-U')[1]}`;
       document.getElementById('unitNumberInput').value = data.number || '';
       document.getElementById('remarkSelect').value = data.status || '';
       document.getElementById('unitModal').style.display = 'flex';
@@ -287,12 +286,12 @@
       const blockName = document.getElementById('blockStreetInput').value || 'Unknown Block';
       const dateVal = document.getElementById('dateInput').value || 'Unknown Date';
       
-      let csv = \`Block/Street:, "\${blockName}"\\n\`;
-      csv += \`Date:, "\${dateVal}"\\n\\n\`;
-      csv += 'Floor/Slot,Unit Number,Status\\n';
+      let csv = `Block/Street:, "${blockName}"\n`;
+      csv += `Date:, "${dateVal}"\n\n`;
+      csv += 'Floor/Slot,Unit Number,Status\n';
       
       for (const [key, value] of Object.entries(blockData)) {
-        csv += \`"\${key}","\${value.number || ''}","\${value.statusLabel || ''}"\\n\`;
+        csv += `"${key}","${value.number || ''}","${value.statusLabel || ''}"\n`;
       }
       
       const blob = new Blob([csv], { type: 'text/csv' });
@@ -301,7 +300,7 @@
       a.setAttribute('href', url);
       let safeFileName = blockName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       if (!safeFileName) safeFileName = "hdb_leads";
-      a.setAttribute('download', \`\${safeFileName}_export.csv\`);
+      a.setAttribute('download', `${safeFileName}_export.csv`);
       a.click();
     }
 
