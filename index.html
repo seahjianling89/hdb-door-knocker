@@ -20,12 +20,12 @@
       gap: 15px; 
     }
     
-    .header-info { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; }
+    .header-info { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 450px; }
     .header-info input { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; }
     
     /* Search Group for API */
     .search-group { display: flex; gap: 8px; width: 100%; align-items: center; }
-    #postalInput { width: 110px; } /* Fixed width for postal code */
+    #postalInput { width: 130px; flex-shrink: 0; }
     #blockStreetInput { flex: 1; min-width: 150px; }
     .search-group button { padding: 12px 16px; height: 100%; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; white-space: nowrap; font-size: 16px; }
     
@@ -80,8 +80,7 @@
   <div class="top-bar">
     <div class="header-info">
       <div class="search-group">
-        <!-- New Postal Code Field -->
-        <input type="number" id="postalInput" placeholder="Postal" onchange="saveHeaderData()">
+        <input type="number" id="postalInput" placeholder="Postal Code" onchange="saveHeaderData()">
         <input type="text" id="blockStreetInput" placeholder="Block & Street Name" onchange="saveHeaderData()">
         <button id="fetchBtn" onclick="fetchHdbInfo()" title="Fetch Max Floors">Get Intel</button>
       </div>
@@ -122,7 +121,6 @@
     let activeUnitId = null;
     let blockData = JSON.parse(localStorage.getItem('hdb_block_data')) || {};
 
-    // Load saved inputs
     document.getElementById('postalInput').value = localStorage.getItem('hdb_header_postal') || '';
     document.getElementById('blockStreetInput').value = localStorage.getItem('hdb_header_block') || '';
     
@@ -155,7 +153,7 @@
       fetchBtn.innerText = "Loading...";
 
       try {
-        // STEP 1: If Postal Code exists, translate it to an address via OneMap SG
+        // STEP 1: Translate Postal Code via OneMap if provided
         if (postalInput.length >= 6) {
           const onemapUrl = `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postalInput}&returnGeom=N&getAddrDetails=Y&pageNum=1`;
           const onemapRes = await fetch(onemapUrl);
@@ -165,8 +163,6 @@
             const exactBlock = onemapData.results[0].BLK_NO;
             const exactStreet = onemapData.results[0].ROAD_NAME;
             query = `${exactBlock} ${exactStreet}`;
-            
-            // Auto-fill the address box so you can see what OneMap found
             document.getElementById('blockStreetInput').value = query;
           } else {
             alert("Could not find an address for this postal code via OneMap.");
@@ -179,23 +175,25 @@
           return;
         }
 
-        // STEP 2: Fetch the HDB Intel from Data.gov.sg using the parsed query
+        // STEP 2: Query Data.gov.sg using ONLY the block number to get a pool of records
+        const queryTokens = query.toUpperCase().split(/\s+/);
+        const targetBlock = queryTokens.find(token => /\d/.test(token)) || queryTokens[0];
+        
         const resource_id = 'd_17f5382f26140b1fdae0ba2ef6239d2f';
-        const url = `https://data.gov.sg/api/action/datastore_search?resource_id=${resource_id}&q=${encodeURIComponent(query)}`;
+        // Search specifically for the block number to avoid cross-street text confusion
+        const url = `https://data.gov.sg/api/action/datastore_search?resource_id=${resource_id}&q=${encodeURIComponent(targetBlock)}&limit=50`;
         
         const response = await fetch(url);
         const data = await response.json();
         
         if (data.success && data.result.records.length > 0) {
           
-          // STRICT FILTERING
-          const queryTokens = query.toUpperCase().split(/\s+/);
-          const targetBlock = queryTokens.find(token => /\d/.test(token)) || queryTokens[0];
-          
+          // Get street keywords (ignoring block number and generic suffixes)
           const streetKeywords = queryTokens.filter(token => 
-            token !== targetBlock && token.length > 2 && token !== 'STREET' && token !== 'AVE' && token !== 'AVENUE'
+            token !== targetBlock && token.length > 2 && token !== 'STREET' && token !== 'ST' && token !== 'AVE' && token !== 'AVENUE' && token !== 'CRESCENT' && token !== 'ROAD' && token !== 'RD'
           );
           
+          // Find the exact record where the block matches AND the street name contains our keywords
           let record = data.result.records.find(r => {
             const isBlockMatch = r.blk_no.toUpperCase() === targetBlock;
             const apiStreet = r.street.toUpperCase();
@@ -203,8 +201,9 @@
             return isBlockMatch && isStreetMatch;
           });
           
+          // Fallback to first block match if street keyword didn't catch
           if (!record) {
-             record = data.result.records[0];
+             record = data.result.records.find(r => r.blk_no.toUpperCase() === targetBlock) || data.result.records[0];
           }
 
           const maxFloor = parseInt(record.max_floor_lvl);
@@ -253,7 +252,7 @@
             renderGrid();
           }
         } else {
-          alert("No results found in HDB database. Try manually tweaking the address format.");
+          alert("No results found in HDB database. Try using the 6-digit postal code instead.");
         }
       } catch (err) {
         console.error(err);
