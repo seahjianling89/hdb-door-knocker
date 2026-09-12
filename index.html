@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>HDB Door Knocker</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { margin: 0; padding: 16px; background: #f4f4f9; color: #333; }
+    h2 { text-align: center; margin-bottom: 8px; }
+    
+    .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; }
+    button { padding: 10px 16px; font-size: 16px; border-radius: 8px; border: none; background: #007aff; color: white; font-weight: bold; cursor: pointer; }
+    button.clear { background: #ff3b30; }
+
+    /* The Tower Layout: Floors stack vertically */
+    .grid-container { display: flex; flex-direction: column; gap: 8px; max-width: 800px; margin: 0 auto; }
+    .floor-row { display: flex; gap: 8px; align-items: center; }
+    .floor-label { width: 70px; font-weight: bold; font-size: 14px; text-align: right; padding-right: 8px; }
+    .units-container { display: flex; flex: 1; gap: 8px; }
+
+    /* Unit Box */
+    .unit-card {
+      flex: 1; height: 60px; background: white; border: 2px solid #ddd; border-radius: 8px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 12px; text-align: center; padding: 2px;
+    }
+    .unit-card.not-home { background: #fff3cd; border-color: #ffebaaca; }
+    .unit-card.not-interested { background: #f8d7da; border-color: #f5c6cb; }
+    .unit-card.follow-up { background: #d4edda; border-color: #c3e6cb; }
+
+    /* Pop-up Modal */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+    .modal-content { background: white; padding: 24px; border-radius: 12px; width: 300px; display: flex; flex-direction: column; gap: 12px; }
+    .modal-content input, .modal-content select { padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+  </style>
+</head>
+<body>
+
+  <h2>HDB Block Tracker</h2>
+  <div class="controls">
+    <button onclick="exportCSV()">Export Data (CSV)</button>
+    <button class="clear" onclick="clearData()">Reset Block</button>
+  </div>
+
+  <div class="grid-container" id="buildingGrid"></div>
+
+  <!-- Modal Interface -->
+  <div class="modal" id="unitModal">
+    <div class="modal-content">
+      <h3 id="modalTitle">Unit Details</h3>
+      <input type="text" id="unitNumberInput" placeholder="Unit No. (e.g. #12-105)">
+      <select id="remarkSelect">
+        <option value="">-- Select Status --</option>
+        <option value="not-home">Not Home</option>
+        <option value="not-interested">Not Interested</option>
+        <option value="follow-up">Follow Up / Warm Lead</option>
+      </select>
+      <button onclick="saveUnitData()">Save Entry</button>
+      <button style="background:#8e8e93" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    const TOTAL_FLOORS = 12; // Change as needed
+    const UNITS_PER_FLOOR = 6; // Change as needed
+    
+    let activeUnitId = null;
+    let blockData = JSON.parse(localStorage.getItem('hdb_block_data')) || {};
+
+    function renderGrid() {
+      const grid = document.getElementById('buildingGrid');
+      grid.innerHTML = '';
+
+      // Build floors from top (highest level) to bottom (Floor 1)
+      for (let f = TOTAL_FLOORS; f >= 1; f--) {
+        const row = document.createElement('div');
+        row.className = 'floor-row';
+        row.innerHTML = `<div class="floor-label">Lvl ${f}</div>`;
+
+        const unitsContainer = document.createElement('div');
+        unitsContainer.className = 'units-container';
+
+        for (let u = 1; u <= UNITS_PER_FLOOR; u++) {
+          const unitId = `F${f}-U${u}`;
+          const savedInfo = blockData[unitId] || {};
+          
+          const card = document.createElement('div');
+          card.className = `unit-card ${savedInfo.status || ''}`;
+          card.onclick = () => openModal(unitId, f);
+          
+          card.innerHTML = `
+            <strong>${savedInfo.number || `Slot ${u}`}</strong>
+            <span>${savedInfo.statusLabel || 'Tap to set'}</span>
+          `;
+          unitsContainer.appendChild(card);
+        }
+        row.appendChild(unitsContainer);
+        grid.appendChild(row);
+      }
+    }
+
+    function openModal(unitId, floor) {
+      activeUnitId = unitId;
+      const data = blockData[unitId] || {};
+      document.getElementById('modalTitle').innerText = `Floor ${floor} - Slot ${unitId.split('-U')[1]}`;
+      document.getElementById('unitNumberInput').value = data.number || '';
+      document.getElementById('remarkSelect').value = data.status || '';
+      document.getElementById('unitModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('unitModal').style.display = 'none';
+    }
+
+    function saveUnitData() {
+      const number = document.getElementById('unitNumberInput').value;
+      const statusSelect = document.getElementById('remarkSelect');
+      const status = statusSelect.value;
+      const statusLabel = statusSelect.options[statusSelect.selectedIndex].text;
+
+      if (status) {
+        blockData[activeUnitId] = { number, status, statusLabel };
+      } else {
+        delete blockData[activeUnitId];
+      }
+
+      localStorage.setItem('hdb_block_data', JSON.stringify(blockData));
+      closeModal();
+      renderGrid();
+    }
+
+    function exportCSV() {
+      let csv = 'Floor/Slot,Unit Number,Status\n';
+      for (const [key, value] of Object.entries(blockData)) {
+        csv += `"${key}","${value.number || ''}","${value.statusLabel || ''}"\n`;
+      }
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('href', url);
+      a.setAttribute('download', 'hdb_knocking_leads.csv');
+      a.click();
+    }
+
+    function clearData() {
+      if (confirm('Are you sure you want to clear all data for this block?')) {
+        blockData = {};
+        localStorage.removeItem('hdb_block_data');
+        renderGrid();
+      }
+    }
+
+    renderGrid();
+  </script>
+</body>
+</html>
