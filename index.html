@@ -6,41 +6,64 @@
   <title>HDB Door Knocker</title>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-    body { margin: 0; padding: 16px; background: #f4f4f9; color: #333; }
-    h2 { text-align: center; margin-bottom: 8px; }
+    body { margin: 0; padding: 20px; background: #f4f4f9; color: #333; }
+    h2 { text-align: center; margin-top: 0; margin-bottom: 20px; }
     
-    .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; }
-    button { padding: 10px 16px; font-size: 16px; border-radius: 8px; border: none; background: #007aff; color: white; font-weight: bold; cursor: pointer; }
+    /* Top Bar Layout */
+    .top-bar { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: flex-start; 
+      max-width: 800px; 
+      margin: 0 auto 20px auto; 
+      flex-wrap: wrap; 
+      gap: 15px; 
+    }
+    
+    .header-info { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; }
+    .header-info input { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; width: 100%; }
+    
+    .controls { display: flex; gap: 10px; }
+    button { padding: 12px 16px; font-size: 16px; border-radius: 8px; border: none; background: #007aff; color: white; font-weight: bold; cursor: pointer; }
     button.clear { background: #ff3b30; }
 
-    /* The Tower Layout: Floors stack vertically */
-    .grid-container { display: flex; flex-direction: column; gap: 8px; max-width: 800px; margin: 0 auto; }
+    /* The Tower Layout */
+    .grid-container { display: flex; flex-direction: column; gap: 8px; max-width: 800px; margin: 0 auto; padding-bottom: 40px; }
     .floor-row { display: flex; gap: 8px; align-items: center; }
     .floor-label { width: 70px; font-weight: bold; font-size: 14px; text-align: right; padding-right: 8px; }
-    .units-container { display: flex; flex: 1; gap: 8px; }
+    .units-container { display: flex; flex: 1; gap: 8px; flex-wrap: wrap; }
 
     /* Unit Box */
     .unit-card {
-      flex: 1; height: 60px; background: white; border: 2px solid #ddd; border-radius: 8px;
+      flex: 1; min-width: 80px; height: 65px; background: white; border: 2px solid #ddd; border-radius: 8px;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      cursor: pointer; font-size: 12px; text-align: center; padding: 2px;
+      cursor: pointer; font-size: 12px; text-align: center; padding: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .unit-card.not-home { background: #fff3cd; border-color: #ffebaaca; }
     .unit-card.not-interested { background: #f8d7da; border-color: #f5c6cb; }
     .unit-card.follow-up { background: #d4edda; border-color: #c3e6cb; }
 
     /* Pop-up Modal */
-    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
-    .modal-content { background: white; padding: 24px; border-radius: 12px; width: 300px; display: flex; flex-direction: column; gap: 12px; }
-    .modal-content input, .modal-content select { padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 10; }
+    .modal-content { background: white; padding: 24px; border-radius: 12px; width: 320px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    .modal-content h3 { margin: 0; text-align: center; }
+    .modal-content input, .modal-content select { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
   </style>
 </head>
 <body>
 
   <h2>HDB Block Tracker</h2>
-  <div class="controls">
-    <button onclick="exportCSV()">Export Data (CSV)</button>
-    <button class="clear" onclick="clearData()">Reset Block</button>
+  
+  <div class="top-bar">
+    <div class="header-info">
+      <!-- Added realistic placeholder for better feel -->
+      <input type="text" id="blockStreetInput" placeholder="Block & Street (e.g. 105A Canberra Street)" onchange="saveHeaderData()">
+      <input type="date" id="dateInput" onchange="saveHeaderData()">
+    </div>
+    <div class="controls">
+      <button onclick="exportCSV()">Export to CSV</button>
+      <button class="clear" onclick="clearData()">Reset Block</button>
+    </div>
   </div>
 
   <div class="grid-container" id="buildingGrid"></div>
@@ -52,7 +75,7 @@
       <input type="text" id="unitNumberInput" placeholder="Unit No. (e.g. #12-105)">
       <select id="remarkSelect">
         <option value="">-- Select Status --</option>
-        <option value="not-home">Not Home</option>
+        <option value="not-home">Not Home / No Answer</option>
         <option value="not-interested">Not Interested</option>
         <option value="follow-up">Follow Up / Warm Lead</option>
       </select>
@@ -62,18 +85,34 @@
   </div>
 
   <script>
-    const TOTAL_FLOORS = 12; // Change as needed
-    const UNITS_PER_FLOOR = 6; // Change as needed
+    const TOTAL_FLOORS = 15; // Change this based on the specific HDB block height
+    const UNITS_PER_FLOOR = 8; // Change this based on how many units per level
     
     let activeUnitId = null;
     let blockData = JSON.parse(localStorage.getItem('hdb_block_data')) || {};
+
+    // Load saved header info (Block/Street and Date)
+    document.getElementById('blockStreetInput').value = localStorage.getItem('hdb_header_block') || '';
+    
+    // Auto-fill today's date if empty
+    let savedDate = localStorage.getItem('hdb_header_date');
+    if (!savedDate) {
+      const today = new Date();
+      savedDate = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    }
+    document.getElementById('dateInput').value = savedDate;
+
+    function saveHeaderData() {
+      localStorage.setItem('hdb_header_block', document.getElementById('blockStreetInput').value);
+      localStorage.setItem('hdb_header_date', document.getElementById('dateInput').value);
+    }
 
     function renderGrid() {
       const grid = document.getElementById('buildingGrid');
       grid.innerHTML = '';
 
-      // Build floors from top (highest level) to bottom (Floor 1)
-      for (let f = TOTAL_FLOORS; f >= 1; f--) {
+      // Build floors from top down, STOPPING at 2 (Removing Level 1)
+      for (let f = TOTAL_FLOORS; f >= 2; f--) {
         const row = document.createElement('div');
         row.className = 'floor-row';
         row.innerHTML = `<div class="floor-label">Lvl ${f}</div>`;
@@ -131,20 +170,30 @@
     }
 
     function exportCSV() {
-      let csv = 'Floor/Slot,Unit Number,Status\n';
+      const blockName = document.getElementById('blockStreetInput').value || 'Unknown Block';
+      const dateVal = document.getElementById('dateInput').value || 'Unknown Date';
+      
+      let csv = `Block/Street:, "${blockName}"\n`;
+      csv += `Date:, "${dateVal}"\n\n`;
+      csv += 'Floor/Slot,Unit Number,Status\n';
+      
       for (const [key, value] of Object.entries(blockData)) {
         csv += `"${key}","${value.number || ''}","${value.statusLabel || ''}"\n`;
       }
+      
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.setAttribute('href', url);
-      a.setAttribute('download', 'hdb_knocking_leads.csv');
+      // Clean up filename based on block input
+      let safeFileName = blockName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      if (!safeFileName) safeFileName = "hdb_leads";
+      a.setAttribute('download', `${safeFileName}_export.csv`);
       a.click();
     }
 
     function clearData() {
-      if (confirm('Are you sure you want to clear all data for this block?')) {
+      if (confirm('Are you sure you want to clear all unit data? (Block & Date will be kept)')) {
         blockData = {};
         localStorage.removeItem('hdb_block_data');
         renderGrid();
