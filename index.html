@@ -79,7 +79,6 @@
   <div class="top-bar">
     <div class="header-info">
       <div class="search-group">
-        <!-- Remember to use the full street name when searching! e.g. 287A Compassvale Crescent -->
         <input type="text" id="blockStreetInput" placeholder="Block & Street Name" onchange="saveHeaderData()">
         <button id="fetchBtn" onclick="fetchHdbInfo()" title="Fetch Max Floors from Data.gov.sg">Get Intel</button>
       </div>
@@ -120,7 +119,6 @@
     let activeUnitId = null;
     let blockData = JSON.parse(localStorage.getItem('hdb_block_data')) || {};
 
-    // Load saved header and intelligence info
     document.getElementById('blockStreetInput').value = localStorage.getItem('hdb_header_block') || '';
     
     const savedIntelHTML = localStorage.getItem('hdb_intelligence_html');
@@ -161,7 +159,20 @@
         const data = await response.json();
         
         if (data.success && data.result.records.length > 0) {
-          const record = data.result.records[0];
+          
+          // SMART FILTERING: Extract the block number from the user's search
+          // This splits the input and finds the first word containing a number (e.g., "126A")
+          const queryTokens = query.toUpperCase().split(/\s+/);
+          const targetBlock = queryTokens.find(token => /\d/.test(token)) || queryTokens[0];
+          
+          // Look through the API results to find the exact matching block
+          let record = data.result.records.find(r => r.blk_no.toUpperCase() === targetBlock);
+          
+          // If no exact match is found, fallback to the first result
+          if (!record) {
+             record = data.result.records[0];
+          }
+
           const maxFloor = parseInt(record.max_floor_lvl);
           
           if (maxFloor && !isNaN(maxFloor)) {
@@ -209,7 +220,7 @@
             renderGrid();
           }
         } else {
-          alert("No results found. Remember to use the full street name (e.g., '287A Compassvale Crescent').");
+          alert("No results found. Remember to use the full street name (e.g., '126A Canberra Street').");
         }
       } catch (err) {
         console.error(err);
@@ -309,7 +320,6 @@
         blockData = {};
         localStorage.removeItem('hdb_block_data');
         
-        // Also clear the intelligence block to start totally fresh
         localStorage.removeItem('hdb_intelligence_html');
         document.getElementById('blockIntelligence').style.display = 'none';
         document.getElementById('blockStreetInput').value = '';
