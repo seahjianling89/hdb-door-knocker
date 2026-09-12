@@ -20,13 +20,13 @@
       gap: 15px; 
     }
     
-    .header-info { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 450px; }
-    .header-info input { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; }
+    .header-info { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 500px; }
+    .header-info input, .header-info select { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; background: white; }
     
     /* Search Group for API */
     .search-group { display: flex; gap: 8px; width: 100%; align-items: center; }
-    #postalInput { width: 130px; flex-shrink: 0; }
-    #blockStreetInput { flex: 1; min-width: 150px; }
+    #searchMode { width: 140px; flex-shrink: 0; }
+    #searchInput { flex: 1; min-width: 150px; }
     .search-group button { padding: 12px 16px; height: 100%; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; white-space: nowrap; font-size: 16px; }
     
     .controls { display: flex; gap: 10px; }
@@ -80,8 +80,13 @@
   <div class="top-bar">
     <div class="header-info">
       <div class="search-group">
-        <input type="number" id="postalInput" placeholder="Postal Code" onchange="saveHeaderData()">
-        <input type="text" id="blockStreetInput" placeholder="Block & Street Name" onchange="saveHeaderData()">
+        <!-- Selector to choose mode -->
+        <select id="searchMode" onchange="updateSearchMode()">
+          <option value="postal">Postal Code</option>
+          <option value="address">Full Address</option>
+        </select>
+        <!-- Dynamic Input Field -->
+        <input type="text" id="searchInput" placeholder="Enter 6-digit postal" onchange="saveHeaderData()">
         <button id="fetchBtn" onclick="fetchHdbInfo()" title="Fetch Max Floors">Get Intel</button>
       </div>
       <input type="date" id="dateInput" onchange="saveHeaderData()" style="width: 100%;">
@@ -121,9 +126,12 @@
     let activeUnitId = null;
     let blockData = JSON.parse(localStorage.getItem('hdb_block_data')) || {};
 
-    document.getElementById('postalInput').value = localStorage.getItem('hdb_header_postal') || '';
-    document.getElementById('blockStreetInput').value = localStorage.getItem('hdb_header_block') || '';
-    
+    // Load saved inputs and mode
+    const savedMode = localStorage.getItem('hdb_search_mode') || 'postal';
+    document.getElementById('searchMode').value = savedMode;
+    document.getElementById('searchInput').value = localStorage.getItem('hdb_header_search') || '';
+    updateSearchMode(false); // Apply placeholder/type without clearing value
+
     const savedIntelHTML = localStorage.getItem('hdb_intelligence_html');
     if (savedIntelHTML) {
       const intelBox = document.getElementById('blockIntelligence');
@@ -138,24 +146,56 @@
     }
     document.getElementById('dateInput').value = savedDate;
 
+    function updateSearchMode(clearInput = true) {
+      const mode = document.getElementById('searchMode').value;
+      const input = document.getElementById('searchInput');
+      
+      if (mode === 'postal') {
+        input.type = 'number';
+        input.placeholder = 'e.g. 750126';
+      } else {
+        input.type = 'text';
+        input.placeholder = 'e.g. 566 Choa Chu Kang St 52';
+      }
+      
+      if (clearInput) {
+        input.value = '';
+      }
+      localStorage.setItem('hdb_search_mode', mode);
+      saveHeaderData();
+    }
+
     function saveHeaderData() {
-      localStorage.setItem('hdb_header_postal', document.getElementById('postalInput').value);
-      localStorage.setItem('hdb_header_block', document.getElementById('blockStreetInput').value);
+      localStorage.setItem('hdb_search_mode', document.getElementById('searchMode').value);
+      localStorage.setItem('hdb_header_search', document.getElementById('searchInput').value);
       localStorage.setItem('hdb_header_date', document.getElementById('dateInput').value);
     }
 
     // --- API INTEGRATION (OneMap + Data.gov.sg) ---
     async function fetchHdbInfo() {
-      const postalInput = document.getElementById('postalInput').value.trim();
-      let query = document.getElementById('blockStreetInput').value.trim();
+      const mode = document.getElementById('searchMode').value;
+      const searchVal = document.getElementById('searchInput').value.trim();
+      let query = '';
       
       const fetchBtn = document.getElementById('fetchBtn');
       fetchBtn.innerText = "Loading...";
 
       try {
-        // STEP 1: Translate Postal Code via OneMap if provided
-        if (postalInput.length >= 6) {
-          const onemapUrl = `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postalInput}&returnGeom=N&getAddrDetails=Y&pageNum=1`;
+        if (!searchVal) {
+          alert(mode === 'postal' ? "Please enter a 6-digit postal code." : "Please enter a full address.");
+          fetchBtn.innerText = "Get Intel";
+          return;
+        }
+
+        // STEP 1: Handle Postal Code via OneMap if postal mode is selected
+        if (mode === 'postal') {
+          if (searchVal.length < 6) {
+            alert("Please enter a valid 6-digit postal code.");
+            fetchBtn.innerText = "Get Intel";
+            return;
+          }
+
+          const onemapUrl = `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${searchVal}&returnGeom=N&getAddrDetails=Y&pageNum=1`;
           const onemapRes = await fetch(onemapUrl);
           const onemapData = await onemapRes.json();
           
@@ -163,24 +203,21 @@
             const exactBlock = onemapData.results[0].BLK_NO;
             const exactStreet = onemapData.results[0].ROAD_NAME;
             query = `${exactBlock} ${exactStreet}`;
-            document.getElementById('blockStreetInput').value = query;
           } else {
             alert("Could not find an address for this postal code via OneMap.");
             fetchBtn.innerText = "Get Intel";
             return;
           }
-        } else if (!query) {
-          alert("Please enter either a Postal Code or a Block & Street name.");
-          fetchBtn.innerText = "Get Intel";
-          return;
+        } else {
+          // Full Address Mode
+          query = searchVal;
         }
 
-        // STEP 2: Query Data.gov.sg using ONLY the block number to get a pool of records
+        // STEP 2: Query Data.gov.sg safely using block and street tokens
         const queryTokens = query.toUpperCase().split(/\s+/);
         const targetBlock = queryTokens.find(token => /\d/.test(token)) || queryTokens[0];
         
         const resource_id = 'd_17f5382f26140b1fdae0ba2ef6239d2f';
-        // Search specifically for the block number to avoid cross-street text confusion
         const url = `https://data.gov.sg/api/action/datastore_search?resource_id=${resource_id}&q=${encodeURIComponent(targetBlock)}&limit=50`;
         
         const response = await fetch(url);
@@ -188,12 +225,10 @@
         
         if (data.success && data.result.records.length > 0) {
           
-          // Get street keywords (ignoring block number and generic suffixes)
           const streetKeywords = queryTokens.filter(token => 
             token !== targetBlock && token.length > 2 && token !== 'STREET' && token !== 'ST' && token !== 'AVE' && token !== 'AVENUE' && token !== 'CRESCENT' && token !== 'ROAD' && token !== 'RD'
           );
           
-          // Find the exact record where the block matches AND the street name contains our keywords
           let record = data.result.records.find(r => {
             const isBlockMatch = r.blk_no.toUpperCase() === targetBlock;
             const apiStreet = r.street.toUpperCase();
@@ -201,7 +236,6 @@
             return isBlockMatch && isStreetMatch;
           });
           
-          // Fallback to first block match if street keyword didn't catch
           if (!record) {
              record = data.result.records.find(r => r.blk_no.toUpperCase() === targetBlock) || data.result.records[0];
           }
@@ -252,7 +286,7 @@
             renderGrid();
           }
         } else {
-          alert("No results found in HDB database. Try using the 6-digit postal code instead.");
+          alert("No results found in HDB database.");
         }
       } catch (err) {
         console.error(err);
@@ -326,12 +360,12 @@
     }
 
     function exportCSV() {
-      const postalVal = document.getElementById('postalInput').value || '';
-      const blockName = document.getElementById('blockStreetInput').value || 'Unknown Block';
+      const mode = document.getElementById('searchMode').value;
+      const searchVal = document.getElementById('searchInput').value || '';
       const dateVal = document.getElementById('dateInput').value || 'Unknown Date';
       
-      let csv = `Postal:, "${postalVal}"\n`;
-      csv += `Block/Street:, "${blockName}"\n`;
+      let csv = `Search Mode:, "${mode}"\n`;
+      csv += `Search Value:, "${searchVal}"\n`;
       csv += `Date:, "${dateVal}"\n\n`;
       csv += 'Floor/Slot,Unit Number,Status\n';
       
@@ -343,23 +377,21 @@
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.setAttribute('href', url);
-      let safeFileName = blockName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      if (!safeFileName) safeFileName = postalVal || "hdb_leads";
+      let safeFileName = searchVal.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      if (!safeFileName) safeFileName = "hdb_leads";
       a.setAttribute('download', `${safeFileName}_export.csv`);
       a.click();
     }
 
     function clearData() {
-      if (confirm('Are you sure you want to clear all unit data? (Block height & Date will be kept)')) {
+      if (confirm('Are you sure you want to clear all unit data? (Search mode & Date will be kept)')) {
         blockData = {};
         localStorage.removeItem('hdb_block_data');
         
         localStorage.removeItem('hdb_intelligence_html');
         document.getElementById('blockIntelligence').style.display = 'none';
-        document.getElementById('postalInput').value = '';
-        document.getElementById('blockStreetInput').value = '';
-        localStorage.removeItem('hdb_header_postal');
-        localStorage.removeItem('hdb_header_block');
+        document.getElementById('searchInput').value = '';
+        localStorage.removeItem('hdb_header_search');
         
         renderGrid();
       }
