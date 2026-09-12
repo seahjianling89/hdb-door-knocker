@@ -14,7 +14,7 @@
       display: flex; 
       justify-content: space-between; 
       align-items: flex-start; 
-      max-width: 800px; 
+      max-width: 900px; 
       margin: 0 auto 15px auto; 
       flex-wrap: wrap; 
       gap: 15px; 
@@ -35,7 +35,7 @@
 
     /* Intelligence Panel */
     .intelligence-box {
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto 20px auto;
       background: #e5f1ff;
       border-left: 5px solid #007aff;
@@ -50,17 +50,24 @@
     .intel-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
     .intel-tag { background: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; border: 1px solid #cce4ff; font-size: 12px; color: #333; }
 
-    /* The Tower Layout */
-    .grid-container { display: flex; flex-direction: column; gap: 8px; max-width: 800px; margin: 0 auto; padding-bottom: 40px; }
-    .floor-row { display: flex; gap: 8px; align-items: center; }
-    .floor-label { width: 70px; font-weight: bold; font-size: 14px; text-align: right; padding-right: 8px; }
-    .units-container { display: flex; flex: 1; gap: 8px; flex-wrap: wrap; }
+    /* The Tower Layout (CSS Grid for Uniform Sizing) */
+    .grid-container { display: flex; flex-direction: column; gap: 8px; max-width: 900px; margin: 0 auto; padding-bottom: 40px; overflow-x: auto; }
+    .floor-row { display: flex; gap: 8px; align-items: center; min-width: 600px; }
+    .floor-label { width: 70px; font-weight: bold; font-size: 14px; text-align: right; padding-right: 8px; flex-shrink: 0; }
+    
+    .units-container { 
+      display: grid; 
+      grid-template-columns: repeat(var(--units-per-floor, 8), 1fr); 
+      flex: 1; 
+      gap: 8px; 
+    }
 
-    /* Unit Box */
+    /* Unit Box - Strictly Uniform Size */
     .unit-card {
-      flex: 1; min-width: 80px; height: 65px; background: white; border: 2px solid #ddd; border-radius: 8px;
+      height: 65px; background: white; border: 2px solid #ddd; border-radius: 8px;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       cursor: pointer; font-size: 12px; text-align: center; padding: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      overflow: hidden;
     }
     .unit-card.not-home { background: #fff3cd; border-color: #ffebaaca; }
     .unit-card.not-interested { background: #f8d7da; border-color: #f5c6cb; }
@@ -80,12 +87,10 @@
   <div class="top-bar">
     <div class="header-info">
       <div class="search-group">
-        <!-- Selector to choose mode -->
         <select id="searchMode" onchange="updateSearchMode()">
           <option value="postal">Postal Code</option>
           <option value="address">Full Address</option>
         </select>
-        <!-- Dynamic Input Field -->
         <input type="text" id="searchInput" placeholder="Enter 6-digit postal" onchange="saveHeaderData()">
         <button id="fetchBtn" onclick="fetchHdbInfo()" title="Fetch Max Floors">Get Intel</button>
       </div>
@@ -121,16 +126,18 @@
 
   <script>
     let TOTAL_FLOORS = parseInt(localStorage.getItem('hdb_total_floors')) || 15; 
-    let UNITS_PER_FLOOR = 10; 
+    let UNITS_PER_FLOOR = parseInt(localStorage.getItem('hdb_units_per_floor')) || 8; 
     
+    // Apply initial CSS variable for grid columns
+    document.documentElement.style.setProperty('--units-per-floor', UNITS_PER_FLOOR);
+
     let activeUnitId = null;
     let blockData = JSON.parse(localStorage.getItem('hdb_block_data')) || {};
 
-    // Load saved inputs and mode
     const savedMode = localStorage.getItem('hdb_search_mode') || 'postal';
     document.getElementById('searchMode').value = savedMode;
     document.getElementById('searchInput').value = localStorage.getItem('hdb_header_search') || '';
-    updateSearchMode(false); // Apply placeholder/type without clearing value
+    updateSearchMode(false);
 
     const savedIntelHTML = localStorage.getItem('hdb_intelligence_html');
     if (savedIntelHTML) {
@@ -187,7 +194,6 @@
           return;
         }
 
-        // STEP 1: Handle Postal Code via OneMap if postal mode is selected
         if (mode === 'postal') {
           if (searchVal.length < 6) {
             alert("Please enter a valid 6-digit postal code.");
@@ -209,11 +215,9 @@
             return;
           }
         } else {
-          // Full Address Mode
           query = searchVal;
         }
 
-        // STEP 2: Query Data.gov.sg safely using block and street tokens
         const queryTokens = query.toUpperCase().split(/\s+/);
         const targetBlock = queryTokens.find(token => /\d/.test(token)) || queryTokens[0];
         
@@ -242,15 +246,34 @@
 
           const maxFloor = parseInt(record.max_floor_lvl);
           
+          // Calculate total dwelling units from flat breakdown
+          const flatTypes = [
+            '1room_sold', '2room_sold', '3room_sold', '4room_sold', '5room_sold', 'exec_sold', 'multigen_sold'
+          ];
+          let totalUnits = 0;
+          flatTypes.forEach(type => {
+            totalUnits += parseInt(record[type]) || 0;
+          });
+
           if (maxFloor && !isNaN(maxFloor)) {
             TOTAL_FLOORS = maxFloor;
             localStorage.setItem('hdb_total_floors', maxFloor);
             
+            // Automatically calculate units per floor (Residential floors = maxFloor - 1 for void deck)
+            const residentialFloors = Math.max(1, maxFloor - 1);
+            if (totalUnits > 0) {
+              UNITS_PER_FLOOR = Math.max(4, Math.ceil(totalUnits / residentialFloors));
+            } else {
+              UNITS_PER_FLOOR = 8; // fallback default
+            }
+            localStorage.setItem('hdb_units_per_floor', UNITS_PER_FLOOR);
+            document.documentElement.style.setProperty('--units-per-floor', UNITS_PER_FLOOR);
+
             const yearCompleted = record.year_completed || "Unknown";
             const currentYear = new Date().getFullYear();
             const age = currentYear - parseInt(yearCompleted);
             
-            const flatTypes = [
+            const flatLabels = [
               { key: '1room_sold', label: '1-Room' },
               { key: '2room_sold', label: '2-Room' },
               { key: '3room_sold', label: '3-Room' },
@@ -261,19 +284,16 @@
             ];
             
             let tagsHtml = '';
-            let totalUnits = 0;
-            
-            flatTypes.forEach(type => {
+            flatLabels.forEach(type => {
               const count = parseInt(record[type.key]);
               if (count > 0) {
                 tagsHtml += `<div class="intel-tag">${type.label}: ${count} units</div>`;
-                totalUnits += count;
               }
             });
 
             const intelHTML = `
               <strong>🏢 Block Intelligence: Blk ${record.blk_no} ${record.street}</strong><br>
-              Completed: ${yearCompleted} (${age} years old) | Total Units: ${totalUnits} | Max Floors: ${maxFloor}
+              Completed: ${yearCompleted} (${age} yrs old) | Total Units: ${totalUnits} | Max Floors: ${maxFloor} (~${UNITS_PER_FLOOR} units/floor)
               <div class="intel-tags">${tagsHtml}</div>
             `;
 
@@ -282,7 +302,6 @@
             intelBox.style.display = 'block';
             
             localStorage.setItem('hdb_intelligence_html', intelHTML);
-            
             renderGrid();
           }
         } else {
