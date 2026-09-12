@@ -160,15 +160,24 @@
         
         if (data.success && data.result.records.length > 0) {
           
-          // SMART FILTERING: Extract the block number from the user's search
-          // This splits the input and finds the first word containing a number (e.g., "126A")
+          // STRICT FILTERING
           const queryTokens = query.toUpperCase().split(/\s+/);
           const targetBlock = queryTokens.find(token => /\d/.test(token)) || queryTokens[0];
           
-          // Look through the API results to find the exact matching block
-          let record = data.result.records.find(r => r.blk_no.toUpperCase() === targetBlock);
+          // Get the main street keywords (ignore the block number and generic words like 'ST', 'STREET', 'AVE')
+          const streetKeywords = queryTokens.filter(token => 
+            token !== targetBlock && token.length > 2 && token !== 'STREET' && token !== 'AVE' && token !== 'AVENUE'
+          );
           
-          // If no exact match is found, fallback to the first result
+          // Find a record where BOTH the block number and the street match
+          let record = data.result.records.find(r => {
+            const isBlockMatch = r.blk_no.toUpperCase() === targetBlock;
+            const apiStreet = r.street.toUpperCase();
+            const isStreetMatch = streetKeywords.length === 0 || streetKeywords.some(kw => apiStreet.includes(kw));
+            return isBlockMatch && isStreetMatch;
+          });
+          
+          // Fallback if the strict match fails, just in case
           if (!record) {
              record = data.result.records[0];
           }
@@ -179,7 +188,6 @@
             TOTAL_FLOORS = maxFloor;
             localStorage.setItem('hdb_total_floors', maxFloor);
             
-            // Build the Intelligence Panel
             const yearCompleted = record.year_completed || "Unknown";
             const currentYear = new Date().getFullYear();
             const age = currentYear - parseInt(yearCompleted);
