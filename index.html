@@ -414,7 +414,7 @@
     }
 
     // --- Sync to Google Sheets Logic ---
-    async function syncToSheets() {
+   async function syncToSheets() {
       if (GOOGLE_SHEETS_WEBHOOK === "YOUR_GOOGLE_SCRIPT_URL_HERE") {
         alert("Setup Required: You need to paste your Google Apps Script URL into the HTML file first!");
         return;
@@ -438,20 +438,22 @@
       };
 
       try {
+        // Send as text/plain to bypass Google's strict CORS preflight checks
         await fetch(GOOGLE_SHEETS_WEBHOOK, {
           method: 'POST',
-          mode: 'no-cors', // Bypasses browser CORS blocking
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
           body: JSON.stringify(payload)
         });
         alert("Successfully synced to Google Sheets!");
       } catch (err) {
+        console.error(err);
         alert("Failed to sync. Make sure you have internet access.");
       }
       
       btn.innerText = "Sync to Sheets";
     }
-
     function clearData() {
       if (confirm('Clear all unit data?')) {
         blockData = {}; localStorage.removeItem('hdb_block_data');
