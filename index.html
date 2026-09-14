@@ -15,8 +15,47 @@
     body { margin: 0; padding: 20px; background: #f4f4f9; color: #333; }
     h2 { text-align: center; margin-top: 0; margin-bottom: 20px; }
     
-    /* Top Bar Layout */
-    .top-bar { display: flex; justify-content: space-between; align-items: flex-start; max-width: 900px; margin: 0 auto 15px auto; flex-wrap: wrap; gap: 15px; }
+    /* Collapsible Controls Section */
+    .controls-wrapper { 
+      max-width: 900px; 
+      margin: 0 auto 15px auto; 
+      background: white; 
+      border-radius: 12px; 
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05); 
+      overflow: hidden; 
+    }
+    
+    .toggle-bar { 
+      background: #007aff; 
+      color: white; 
+      padding: 12px 20px; 
+      font-weight: bold; 
+      font-size: 16px; 
+      cursor: pointer; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+    }
+    
+    .toggle-bar span { 
+      transition: transform 0.3s ease; 
+    }
+    .toggle-bar.closed span { 
+      transform: rotate(-180deg); 
+    }
+
+    .collapsible-content { 
+      padding: 20px; 
+      display: block; /* Default is open */
+      transition: all 0.3s ease; 
+    }
+    
+    .collapsible-content.hidden { 
+      display: none; 
+    }
+
+    /* Top Bar Layout (Inside Collapsible) */
+    .top-bar { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;}
     .header-info { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 500px; }
     .header-info input, .header-info select { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; background: white; }
     
@@ -30,8 +69,8 @@
     button.clear { background: #ff3b30; }
     button.sync-btn { background: #6f42c1; } /* Purple for Sync */
 
-    /* Intelligence Panel */
-    .intelligence-box { max-width: 900px; margin: 0 auto 15px auto; background: #e5f1ff; border-left: 5px solid #007aff; padding: 12px 16px; border-radius: 6px; font-size: 14px; line-height: 1.5; display: none; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    /* Intelligence Panel (Inside Collapsible) */
+    .intelligence-box { background: #e5f1ff; border-left: 5px solid #007aff; padding: 12px 16px; border-radius: 6px; font-size: 14px; line-height: 1.5; display: none; margin-bottom: 0; }
     .intelligence-box strong { color: #004b99; }
     .intel-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
     .intel-tag { background: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; border: 1px solid #cce4ff; font-size: 12px; color: #333; }
@@ -78,31 +117,40 @@
 
   <h2>HDB Block Tracker</h2>
   
-  <div class="top-bar">
-    <div class="header-info">
-      <div class="search-group">
-        <select id="searchMode" onchange="updateSearchMode()">
-          <option value="postal">Postal Code</option>
-          <option value="address">Full Address</option>
-        </select>
-        <input type="text" id="searchInput" placeholder="Enter 6-digit postal" onchange="saveHeaderData()">
-        <button id="fetchBtn" onclick="fetchHdbInfo()" title="Fetch Max Floors">Get Intel</button>
-      </div>
-      <input type="date" id="dateInput" onchange="saveHeaderData()" style="width: 100%;">
+  <!-- Collapsible Controls Section -->
+  <div class="controls-wrapper">
+    <div class="toggle-bar" id="toggleBar" onclick="toggleControls()">
+      <div id="toggleText">Hide Controls</div>
+      <span>▼</span>
     </div>
     
-    <div class="controls">
-      <button class="action-btn" onclick="exportCSV()">Export to CSV</button>
-      <!-- New Google Sheets Button -->
-      <button class="action-btn sync-btn" id="syncBtn" onclick="syncToSheets()">Sync to Sheets</button>
-      <button class="action-btn clear" onclick="clearData()">Reset Block</button>
+    <div class="collapsible-content" id="collapsibleContent">
+      <div class="top-bar">
+        <div class="header-info">
+          <div class="search-group">
+            <select id="searchMode" onchange="updateSearchMode()">
+              <option value="postal">Postal Code</option>
+              <option value="address">Full Address</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="Enter 6-digit postal" onchange="saveHeaderData()">
+            <button id="fetchBtn" onclick="fetchHdbInfo()" title="Fetch Max Floors">Get Intel</button>
+          </div>
+          <input type="date" id="dateInput" onchange="saveHeaderData()" style="width: 100%;">
+        </div>
+        
+        <div class="controls">
+          <button class="action-btn" onclick="exportCSV()">Export to CSV</button>
+          <button class="action-btn sync-btn" id="syncBtn" onclick="syncToSheets()">Sync to Sheets</button>
+          <button class="action-btn clear" onclick="clearData()">Reset Block</button>
+        </div>
+      </div>
+
+      <!-- Intelligence Panel -->
+      <div id="blockIntelligence" class="intelligence-box"></div>
     </div>
   </div>
 
-  <!-- Intelligence Panel -->
-  <div id="blockIntelligence" class="intelligence-box"></div>
-
-  <!-- NEW Stats Dashboard (Above Grid) -->
+  <!-- Stats Dashboard (Above Grid) -->
   <div class="stats-dashboard" id="statsDashboard">
     <!-- Populated by JavaScript -->
   </div>
@@ -141,7 +189,7 @@
       });
     }
 
-    // Replace this URL with your actual Google Apps Script URL later!
+    // Replace this URL with your actual Google Apps Script URL
     const GOOGLE_SHEETS_WEBHOOK = "https://script.google.com/macros/s/AKfycby-yN4W4v8RTlO6yPvxEgXxUQI6CsYq_vxWvSIoZJsEzG-X4E5LZczMzsvMGmRE59HdCA/exec";
 
     let TOTAL_FLOORS = parseInt(localStorage.getItem('hdb_total_floors')) || 15; 
@@ -168,6 +216,23 @@
       savedDate = new Date().toISOString().split('T')[0];
     }
     document.getElementById('dateInput').value = savedDate;
+
+    // --- Dropdown Menu Logic ---
+    function toggleControls() {
+      const content = document.getElementById('collapsibleContent');
+      const toggleBar = document.getElementById('toggleBar');
+      const toggleText = document.getElementById('toggleText');
+      
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        toggleBar.classList.remove('closed');
+        toggleText.innerText = 'Hide Controls';
+      } else {
+        content.classList.add('hidden');
+        toggleBar.classList.add('closed');
+        toggleText.innerText = 'Show Controls';
+      }
+    }
 
     function updateSearchMode(clearInput = true) {
       const mode = document.getElementById('searchMode').value;
@@ -366,7 +431,7 @@
         }
         row.appendChild(unitsContainer); grid.appendChild(row);
       }
-      updateDashboard(); // Run Dashboard calculation after grid renders
+      updateDashboard();
     }
 
     function openModal(unitId, floor, slot) {
@@ -378,6 +443,7 @@
       document.getElementById('unitModal').style.display = 'flex';
       setTimeout(() => { const input = document.getElementById('unitNumberInput'); input.focus(); input.setSelectionRange(input.value.length, input.value.length); }, 100);
     }
+    
     function closeModal() { document.getElementById('unitModal').style.display = 'none'; }
 
     function saveUnitData() {
@@ -413,8 +479,7 @@
       a.setAttribute('download', `${document.getElementById('searchInput').value.replace(/[^a-z0-9]/gi, '_') || "hdb_leads"}.csv`); a.click();
     }
 
-    // --- Sync to Google Sheets Logic ---
-   async function syncToSheets() {
+    async function syncToSheets() {
       if (GOOGLE_SHEETS_WEBHOOK === "YOUR_GOOGLE_SCRIPT_URL_HERE") {
         alert("Setup Required: You need to paste your Google Apps Script URL into the HTML file first!");
         return;
@@ -423,7 +488,6 @@
       const btn = document.getElementById('syncBtn');
       btn.innerText = "Syncing...";
 
-      // Filter only units that actually have a status
       const knockedUnits = {};
       for (const key in blockData) {
         if (blockData[key].status) {
@@ -438,7 +502,6 @@
       };
 
       try {
-        // Send as text/plain to bypass Google's strict CORS preflight checks
         await fetch(GOOGLE_SHEETS_WEBHOOK, {
           method: 'POST',
           headers: {
@@ -454,6 +517,7 @@
       
       btn.innerText = "Sync to Sheets";
     }
+
     function clearData() {
       if (confirm('Clear all unit data?')) {
         blockData = {}; localStorage.removeItem('hdb_block_data');
