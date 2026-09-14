@@ -1,0 +1,15 @@
+{
+  "name": "HDB Knocker",
+  "short_name": "HDB Knocker",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f4f9",
+  "theme_color": "#f4f4f9",
+  "icons": [
+    {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Home_Icon.svg/512px-Home_Icon.svg.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
