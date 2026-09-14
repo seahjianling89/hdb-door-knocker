@@ -50,7 +50,7 @@
     .intel-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
     .intel-tag { background: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; border: 1px solid #cce4ff; font-size: 12px; color: #333; }
 
-    /* The Tower Layout (CSS Grid for Uniform Sizing) */
+    /* The Tower Layout */
     .grid-container { display: flex; flex-direction: column; gap: 8px; max-width: 900px; margin: 0 auto; padding-bottom: 40px; overflow-x: auto; }
     .floor-row { display: flex; gap: 8px; align-items: center; min-width: 600px; }
     .floor-label { width: 70px; font-weight: bold; font-size: 14px; text-align: right; padding-right: 8px; flex-shrink: 0; }
@@ -62,16 +62,28 @@
       gap: 8px; 
     }
 
-    /* Unit Box - Strictly Uniform Size */
+    /* Unit Box - Color Coded Updates */
     .unit-card {
       height: 65px; background: white; border: 2px solid #ddd; border-radius: 8px;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       cursor: pointer; font-size: 12px; text-align: center; padding: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
       overflow: hidden;
+      color: #333;
     }
-    .unit-card.not-home { background: #fff3cd; border-color: #ffebaaca; }
-    .unit-card.not-interested { background: #f8d7da; border-color: #f5c6cb; }
-    .unit-card.follow-up { background: #d4edda; border-color: #c3e6cb; }
+    .unit-card.not-home { background: #ffc107; border-color: #e0a800; color: #000; font-weight: bold;} /* Amber */
+    .unit-card.not-interested { background: #ff4d4f; border-color: #d9363e; color: #fff; font-weight: bold;} /* Red */
+    .unit-card.follow-up { background: #28a745; border-color: #218838; color: #fff; font-weight: bold;} /* Green */
+
+    /* Save Slot System Layout */
+    .save-manager { max-width: 900px; margin: 40px auto 20px auto; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+    .save-manager h3 { margin-top: 0; text-align: center; color: #333; }
+    .save-slots-grid { display: flex; flex-direction: column; gap: 10px; }
+    .save-slot { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9; }
+    .save-slot-title { font-weight: bold; font-size: 14px; flex: 1; }
+    .save-slot-actions { display: flex; gap: 8px; }
+    .save-slot-actions button { padding: 8px 12px; font-size: 14px; border-radius: 6px; }
+    .btn-save { background: #007aff; }
+    .btn-load { background: #34c759; }
 
     /* Pop-up Modal */
     .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 10; }
@@ -107,6 +119,14 @@
   <div id="blockIntelligence" class="intelligence-box"></div>
 
   <div class="grid-container" id="buildingGrid"></div>
+
+  <!-- RPG Save System -->
+  <div class="save-manager">
+    <h3>Save Slots</h3>
+    <div class="save-slots-grid" id="saveSlotsContainer">
+      <!-- Generated via JS -->
+    </div>
+  </div>
 
   <!-- Modal Interface -->
   <div class="modal" id="unitModal">
@@ -179,6 +199,96 @@
       localStorage.setItem('hdb_header_search', document.getElementById('searchInput').value);
       localStorage.setItem('hdb_header_date', document.getElementById('dateInput').value);
     }
+
+    // --- SAVE SLOT SYSTEM ---
+    function renderSaveSlots() {
+      const container = document.getElementById('saveSlotsContainer');
+      container.innerHTML = '';
+      
+      for (let i = 1; i <= 10; i++) {
+        const savedSlotData = JSON.parse(localStorage.getItem(`hdb_save_slot_${i}`));
+        
+        const slotEl = document.createElement('div');
+        slotEl.className = 'save-slot';
+        
+        const titleEl = document.createElement('div');
+        titleEl.className = 'save-slot-title';
+        titleEl.innerText = savedSlotData ? savedSlotData.title : `Slot ${i} - Empty Save Slot`;
+        
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'save-slot-actions';
+        
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'action-btn btn-save';
+        saveBtn.innerText = 'Save';
+        saveBtn.onclick = () => performSave(i);
+        
+        actionsEl.appendChild(saveBtn);
+        
+        if (savedSlotData) {
+          const loadBtn = document.createElement('button');
+          loadBtn.className = 'action-btn btn-load';
+          loadBtn.innerText = 'Load';
+          loadBtn.onclick = () => performLoad(i);
+          actionsEl.appendChild(loadBtn);
+        }
+        
+        slotEl.appendChild(titleEl);
+        slotEl.appendChild(actionsEl);
+        container.appendChild(slotEl);
+      }
+    }
+
+    function performSave(slotId) {
+      const searchVal = document.getElementById('searchInput').value.trim() || 'Unknown Block';
+      const dateVal = document.getElementById('dateInput').value || 'Unknown Date';
+      const slotTitle = `${searchVal} - ${dateVal}`;
+      
+      const saveData = {
+        title: slotTitle,
+        blockData: blockData,
+        totalFloors: TOTAL_FLOORS,
+        unitsPerFloor: UNITS_PER_FLOOR,
+        searchMode: document.getElementById('searchMode').value,
+        searchVal: searchVal,
+        dateVal: dateVal,
+        intelHtml: document.getElementById('blockIntelligence').innerHTML
+      };
+      
+      localStorage.setItem(`hdb_save_slot_${slotId}`, JSON.stringify(saveData));
+      alert(`Data saved to Slot ${slotId}`);
+      renderSaveSlots();
+    }
+
+    function performLoad(slotId) {
+      if (!confirm(`Are you sure you want to load Slot ${slotId}? Current unsaved progress will be lost.`)) return;
+      
+      const savedData = JSON.parse(localStorage.getItem(`hdb_save_slot_${slotId}`));
+      if (!savedData) return;
+
+      blockData = savedData.blockData;
+      TOTAL_FLOORS = savedData.totalFloors;
+      UNITS_PER_FLOOR = savedData.unitsPerFloor;
+      
+      localStorage.setItem('hdb_block_data', JSON.stringify(blockData));
+      localStorage.setItem('hdb_total_floors', TOTAL_FLOORS);
+      localStorage.setItem('hdb_units_per_floor', UNITS_PER_FLOOR);
+      
+      document.documentElement.style.setProperty('--units-per-floor', UNITS_PER_FLOOR);
+      
+      document.getElementById('searchMode').value = savedData.searchMode;
+      document.getElementById('searchInput').value = savedData.searchVal;
+      document.getElementById('dateInput').value = savedData.dateVal;
+      updateSearchMode(false);
+      
+      const intelBox = document.getElementById('blockIntelligence');
+      intelBox.innerHTML = savedData.intelHtml;
+      intelBox.style.display = savedData.intelHtml ? 'block' : 'none';
+      localStorage.setItem('hdb_intelligence_html', savedData.intelHtml);
+      
+      renderGrid();
+    }
+    // ------------------------
 
     // --- API INTEGRATION ---
     async function fetchHdbInfo() {
@@ -383,7 +493,6 @@
 
       const floorStr = activeFloorNum < 10 ? `0${activeFloorNum}` : `${activeFloorNum}`;
       
-      // Handle formatting if user just typed the suffix
       if (inputVal && !inputVal.includes('-')) {
         inputVal = `#${floorStr}-${inputVal.padStart(3, '0')}`;
       } else if (!inputVal) {
@@ -391,11 +500,9 @@
         inputVal = `#${floorStr}-${slotStr}`;
       }
 
-      // Extract the unit/stack suffix (e.g., "-771" from "#04-771")
       const parts = inputVal.split('-');
       const unitSuffix = parts.length > 1 ? parts[1] : '';
 
-      // Save/Update the targeted slot AND auto-fill the whole column stack
       for (let f = TOTAL_FLOORS; f >= 2; f--) {
         const targetUnitId = `F${f}-U${activeSlotNum}`;
         const fStr = f < 10 ? `0${f}` : `${f}`;
@@ -405,10 +512,8 @@
           blockData[targetUnitId] = {};
         }
 
-        // Always update the unit number for this column stack
         blockData[targetUnitId].number = generatedUnitNum;
 
-        // If this is the exact slot the user clicked, also save their chosen status
         if (targetUnitId === activeUnitId) {
           if (status) {
             blockData[targetUnitId].status = status;
@@ -417,11 +522,6 @@
             delete blockData[targetUnitId].status;
             delete blockData[targetUnitId].statusLabel;
           }
-        }
-
-        // Clean up empty entries if no status and default slot name
-        if (!blockData[targetUnitId].status && blockData[targetUnitId].number === generatedUnitNum) {
-          // Keep if number was customized, but clean if completely blank status
         }
       }
 
@@ -469,6 +569,7 @@
     }
 
     renderGrid();
+    renderSaveSlots(); // Initialize RPG Save System
   </script>
 </body>
 </html>
