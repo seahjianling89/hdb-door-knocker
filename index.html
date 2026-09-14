@@ -17,12 +17,15 @@
       --text-main: #1c1e21;
       --text-muted: #606770;
       --border-color: #dadde1;
-      --primary: #041E42; /* Sleek Navy Blue */
+      --primary: #041E42; 
       --primary-hover: #0a2d5e;
       --accent: #34c759;
       --danger: #ff3b30;
       --header-bg: #e5f1ff;
       --shadow: 0 4px 12px rgba(0,0,0,0.08);
+      
+      /* Water Fill Effect */
+      --fill-water: rgba(0, 122, 255, 0.15);
       
       /* Status Colors */
       --stat-nothome-bg: #ffc107;
@@ -33,9 +36,13 @@
       --stat-notint-border: #d9363e;
       --stat-notint-text: #ffffff;
       
-      --stat-warm-bg: #28a745;
-      --stat-warm-border: #218838;
-      --stat-warm-text: #ffffff;
+      --stat-namecard-bg: #007aff; /* Blue */
+      --stat-namecard-border: #0056b3;
+      --stat-namecard-text: #ffffff;
+
+      --stat-phone-bg: #28a745; /* Green */
+      --stat-phone-border: #218838;
+      --stat-phone-text: #ffffff;
     }
 
     body.dark-theme {
@@ -49,6 +56,8 @@
       --header-bg: #1a2736;
       --shadow: 0 4px 12px rgba(0,0,0,0.3);
       
+      --fill-water: rgba(0, 122, 255, 0.35);
+
       /* Muted Status Colors for Dark Mode */
       --stat-nothome-bg: #b38600;
       --stat-nothome-border: #806000;
@@ -58,9 +67,13 @@
       --stat-notint-border: #731518;
       --stat-notint-text: #ffffff;
       
-      --stat-warm-bg: #1b6d2b;
-      --stat-warm-border: #114a1c;
-      --stat-warm-text: #ffffff;
+      --stat-namecard-bg: #0056b3;
+      --stat-namecard-border: #004085;
+      --stat-namecard-text: #ffffff;
+
+      --stat-phone-bg: #1b6d2b;
+      --stat-phone-border: #114a1c;
+      --stat-phone-text: #ffffff;
     }
 
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -101,6 +114,7 @@
     button.action-btn:active { transform: scale(0.97); }
     button.clear { background: var(--danger); }
     button.sync-btn { background: #6f42c1; } 
+    button.btn-delete { background: var(--danger); }
 
     /* Intelligence Panel */
     .intelligence-box { background: var(--header-bg); border-left: 5px solid var(--primary); padding: 16px; border-radius: 8px; font-size: 15px; line-height: 1.6; display: none; margin-bottom: 0; }
@@ -112,9 +126,26 @@
     .stats-dashboard { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 0 auto 24px auto; width: 100%; }
     .stat-box { background: var(--bg-panel); padding: 12px 16px; border-radius: 10px; border: 2px solid var(--border-color); font-weight: 600; font-size: 14px; display: flex; flex-direction: column; align-items: center; min-width: 120px; box-shadow: var(--shadow); transition: all 0.3s; }
     .stat-box .count { font-size: 24px; margin-top: 6px; color: var(--text-main); }
-    .stat-box.warm { border-color: var(--stat-warm-bg); color: var(--stat-warm-bg); }
     .stat-box.nothome { border-color: var(--stat-nothome-bg); color: var(--stat-nothome-bg); }
     .stat-box.notint { border-color: var(--stat-notint-bg); color: var(--stat-notint-bg); }
+    
+    /* Water Fill Effect for Units Knocked */
+    .stat-box.knocked {
+      position: relative;
+      overflow: hidden;
+      border-color: var(--primary);
+    }
+    .stat-box.knocked::before {
+      content: "";
+      position: absolute;
+      bottom: 0; left: 0;
+      width: 100%;
+      height: var(--fill-percent, 0%);
+      background: var(--fill-water);
+      transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 0;
+    }
+    .stat-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
 
     /* The Tower Layout (Auto-adjusting width) */
     .grid-container { display: flex; flex-direction: column; gap: 10px; width: 100%; margin: 0 auto; padding-bottom: 40px; overflow-x: auto; }
@@ -137,7 +168,8 @@
     
     .unit-card.not-home { background: var(--stat-nothome-bg); border-color: var(--stat-nothome-border); color: var(--stat-nothome-text); }
     .unit-card.not-interested { background: var(--stat-notint-bg); border-color: var(--stat-notint-border); color: var(--stat-notint-text); }
-    .unit-card.follow-up { background: var(--stat-warm-bg); border-color: var(--stat-warm-border); color: var(--stat-warm-text); }
+    .unit-card.name-card { background: var(--stat-namecard-bg); border-color: var(--stat-namecard-border); color: var(--stat-namecard-text); }
+    .unit-card.phone-number { background: var(--stat-phone-bg); border-color: var(--stat-phone-border); color: var(--stat-phone-text); }
 
     /* Save System */
     .save-manager { width: 100%; margin: 40px auto 20px auto; padding: 24px; background: var(--bg-panel); border-radius: 12px; box-shadow: var(--shadow); }
@@ -163,7 +195,7 @@
   <div class="header-container">
     <button class="theme-icon-btn" onclick="setTheme(true)" title="Turn On Dark Mode">🌙</button>
     <h2>HDB Door Knocker</h2>
-    <button class="theme-icon-btn" onclick="setTheme(false)" title="Turn Off Dark Mode (Light Mode)">☀️</button>
+    <button class="theme-icon-btn" onclick="setTheme(false)" title="Turn Off Dark Mode">☀️</button>
   </div>
   
   <div class="controls-wrapper">
@@ -181,7 +213,7 @@
               <option value="address">Full Address</option>
             </select>
             <input type="text" id="searchInput" placeholder="Enter 6-digit postal" onchange="saveHeaderData()">
-            <button id="fetchBtn" onclick="fetchHdbInfo()" title="Fetch Max Floors">Get Intel</button>
+            <button id="fetchBtn" onclick="fetchHdbInfo()" title="Search HDB Database">Search</button>
           </div>
           <input type="date" id="dateInput" onchange="saveHeaderData()" style="width: 100%;">
         </div>
@@ -215,7 +247,8 @@
         <option value="">-- Select Status --</option>
         <option value="not-home">Not Home / No Answer</option>
         <option value="not-interested">Not Interested</option>
-        <option value="follow-up">Follow Up / Warm Lead</option>
+        <option value="name-card">Name Card</option>
+        <option value="phone-number">Phone Number</option>
       </select>
       <button class="action-btn" style="padding: 14px; font-size: 18px;" onclick="saveUnitData()">Save Entry</button>
       <button class="action-btn" style="background:var(--text-muted);" onclick="closeModal()">Cancel</button>
@@ -322,18 +355,32 @@
 
     // --- Dashboard & Saves ---
     function updateDashboard() {
-      let totalKnocked = 0, warm = 0, notHome = 0, notInterested = 0;
+      let totalKnocked = 0, nameCard = 0, phoneNum = 0, notHome = 0, notInterested = 0;
+      
       for (const key in blockData) {
         if (blockData[key].status) {
           totalKnocked++;
-          if (blockData[key].status === 'follow-up') warm++;
+          if (blockData[key].status === 'name-card') nameCard++;
+          if (blockData[key].status === 'phone-number') phoneNum++;
           if (blockData[key].status === 'not-home') notHome++;
           if (blockData[key].status === 'not-interested') notInterested++;
         }
       }
+
+      // Calculate Water Fill Percentage based on rendered slots
+      const totalSlots = Math.max(1, (TOTAL_FLOORS - 1) * UNITS_PER_FLOOR);
+      const fillPercent = Math.min(100, Math.round((totalKnocked / totalSlots) * 100));
+
       document.getElementById('statsDashboard').innerHTML = `
-        <div class="stat-box">Units Knocked <span class="count">${totalKnocked}</span></div>
-        <div class="stat-box warm">Warm Leads <span class="count">${warm}</span></div>
+        <div class="stat-box knocked" style="--fill-percent: ${fillPercent}%">
+          <div class="stat-content">
+            Units Knocked 
+            <span class="count">${totalKnocked}</span>
+            <span style="font-size: 11px; font-weight: normal; margin-top: 2px;">${fillPercent}%</span>
+          </div>
+        </div>
+        <div class="stat-box" style="border-color: var(--stat-phone-bg); color: var(--stat-phone-bg);">Phone No. <span class="count">${phoneNum}</span></div>
+        <div class="stat-box" style="border-color: var(--stat-namecard-bg); color: var(--stat-namecard-bg);">Name Card <span class="count">${nameCard}</span></div>
         <div class="stat-box nothome">Not Home <span class="count">${notHome}</span></div>
         <div class="stat-box notint">Not Interested <span class="count">${notInterested}</span></div>
       `;
@@ -366,6 +413,12 @@
           loadBtn.innerText = 'Load';
           loadBtn.onclick = () => performLoad(i);
           actionsEl.appendChild(loadBtn);
+
+          const delBtn = document.createElement('button');
+          delBtn.className = 'action-btn btn-delete';
+          delBtn.innerText = 'Delete';
+          delBtn.onclick = () => performDelete(i);
+          actionsEl.appendChild(delBtn);
         }
         
         slotEl.appendChild(titleEl);
@@ -414,6 +467,13 @@
       renderGrid();
     }
 
+    function performDelete(slotId) {
+      if (confirm(`Are you absolutely sure you want to permanently delete Slot ${slotId}?`)) {
+        localStorage.removeItem(`hdb_save_slot_${slotId}`);
+        renderSaveSlots();
+      }
+    }
+
     // --- API Fetch ---
     async function fetchHdbInfo() {
       const mode = document.getElementById('searchMode').value;
@@ -423,14 +483,14 @@
       fetchBtn.innerText = "Loading...";
 
       try {
-        if (!searchVal) { alert("Please enter input."); fetchBtn.innerText = "Get Intel"; return; }
+        if (!searchVal) { alert("Please enter input."); fetchBtn.innerText = "Search"; return; }
         if (mode === 'postal') {
           const onemapUrl = `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${searchVal}&returnGeom=N&getAddrDetails=Y&pageNum=1`;
           const onemapRes = await fetch(onemapUrl);
           const onemapData = await onemapRes.json();
           if (onemapData && onemapData.found > 0) {
             query = `${onemapData.results[0].BLK_NO} ${onemapData.results[0].ROAD_NAME}`;
-          } else { alert("Address not found via OneMap."); fetchBtn.innerText = "Get Intel"; return; }
+          } else { alert("Address not found via OneMap."); fetchBtn.innerText = "Search"; return; }
         } else { query = searchVal; }
 
         const queryTokens = query.toUpperCase().split(/\s+/);
@@ -475,7 +535,7 @@
           }
         } else { alert("No results found in HDB database."); }
       } catch (err) { console.error(err); alert("Error fetching data."); }
-      fetchBtn.innerText = "Get Intel";
+      fetchBtn.innerText = "Search";
       saveHeaderData();
     }
 
